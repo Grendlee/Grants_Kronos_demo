@@ -11,7 +11,7 @@ Probabilistic BTC/USD and ETH/USD forecast based on the [Kronos](https://github.
 ## Architecture
 
 ```
-Kaggle Kernel (free P100 GPU, scheduled every 12h)
+Kaggle Kernel (free T4 GPU, scheduled every 12h)
    ↓ git clone + run update_predictions.py
    ↓ git push refreshed PNGs + index.html
 GitHub repo (main branch)
@@ -32,13 +32,15 @@ Kronos-Base is a 102M-param model. Per-symbol runtime by device:
 
 | Device | Time per symbol |
 |---|---|
-| CUDA (P100/T4) | ~3 min |
+| CUDA (T4) | ~3 min |
 | Apple MPS | ~5–7 min |
 | CPU | ~60+ min |
 
-## Production refresh — Kaggle Kernel (free P100 GPU)
+## Production refresh — Kaggle Kernel (free T4 GPU)
 
 This is the deployed setup. Inference runs on Kaggle, results push back to this repo, GitHub Pages serves them.
+
+> **Note on GPU choice:** Kaggle still offers P100 in the menu, but as of 2026 their PyTorch image dropped support for the P100's older compute capability (`sm_60`). Use **T4 x2** — `sm_75`, fully supported, same throughput on this workload.
 
 **One-time setup:**
 
@@ -46,29 +48,33 @@ This is the deployed setup. Inference runs on Kaggle, results push back to this 
    - GitHub → Settings → Developer settings → Personal access tokens → Fine-grained
    - Repository access: only this repo
    - Permissions: `Contents: Read and write`
-   - Copy the `github_pat_...` value
+   - Copy the `github_pat_...` value (one-shot — GitHub won't show it again)
 
-2. **Create the Kaggle notebook**
-   - Sign in at https://www.kaggle.com (verify your phone if you haven't — required for free GPU)
-   - File → New Notebook → Import Notebook → upload `kaggle_runner.ipynb` from this repo (or paste the GitHub URL)
+2. **Create a HuggingFace read token** *(optional but recommended)*
+   - https://huggingface.co/settings/tokens → New token → Read role
+   - Avoids "unauthenticated requests" rate-limit warnings on model download
 
-3. **Configure the notebook**
-   - Right sidebar → Settings:
-     - Accelerator: **GPU P100**
+3. **Create the Kaggle notebook**
+   - Sign in at https://www.kaggle.com (verify your phone if you haven't — required for free GPU and Secrets)
+   - **+ New Notebook** → **File → Import Notebook** → **GitHub** tab → paste this repo's `kaggle_runner.ipynb` raw URL
+
+4. **Configure the notebook**
+   - Right sidebar → Session options:
+     - Accelerator: **GPU T4 x2**
      - Internet: **On**
-     - Persistence: Off (a fresh container each run is fine)
-   - Add-ons → Secrets → Add a new secret:
-     - Label: `GITHUB_TOKEN`
-     - Value: the PAT from step 1
-     - Attach to this notebook
+     - Persistence: Off
+   - Top menu → Add-ons → Secrets:
+     - `GITHUB_TOKEN` = the PAT from step 1 (required)
+     - `HF_TOKEN` = the HF token from step 2 (optional)
+     - Toggle "Attached" on for both
 
-4. **First run** — click `Save & Run All` to verify it pushes a refreshed forecast to the repo.
+5. **First run** — click `Save & Run All` to verify it pushes a refreshed forecast to the repo.
 
-5. **Schedule recurring runs**
+6. **Schedule recurring runs**
    - From the notebook viewer (after a successful run), `⋯` menu → `Schedule a notebook run`
    - Cadence: every 12 hours
 
-Each scheduled run takes ~5–8 min on the P100. Free quota is 30 GPU-hours/week — plenty of headroom.
+Each scheduled run takes ~5–8 min on the T4. Free quota is 30 GPU-hours/week — plenty of headroom.
 
 ## Deploying GitHub Pages
 
@@ -93,7 +99,7 @@ The original spec asked for "the last 720 hours (~30 days) of BTC/ETH 10-min K-l
 | 10-min candles | ✅ resampled from 5-min | Binance has no native 10m interval (returns `{"code":-1120,"msg":"Invalid interval"}`) |
 | **720h of context** | **30-day history displayed; 85h fed to model** | Kronos-Base's `max_context = 512` candles. 720h × 6 candles/hr = 4,320 candles, 8× over the limit. Architecturally impossible to feed in a single forward pass. The chart shows the full 30 days; the model's input window is the last 512 candles |
 | N=30 Monte Carlo paths | ✅ | — |
-| Free GPU compute | ✅ Kaggle P100 | — |
+| Free GPU compute | ✅ Kaggle T4 x2 | — |
 | GitHub Pages hosting | ✅ | — |
 | Mean forecast + uncertainty band + probability metrics | ✅ | — |
 

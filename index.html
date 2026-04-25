@@ -76,7 +76,7 @@
                 <li><strong>Display history</strong> — 30 days (720h) of 10-min BTC/USD and ETH/USD candles from Binance.US, resampled from native 5-min data, plotted on the chart.</li>
                 <li><strong>Model context</strong> — the last 512 of those candles (~85h) is fed to Kronos-Base. The model's <code>max_context</code> is 512, so the full 720h cannot be passed in a single forward pass.</li>
                 <li><strong>Sampling</strong> — Monte Carlo with N=30 paths, generating a distribution of possible 24h trajectories rather than a point forecast.</li>
-                <li><strong>Compute</strong> — inference runs on a Kaggle Kernel (free P100 GPU), scheduled every 12 hours. Results are pushed back to this repo and served by GitHub Pages.</li>
+                <li><strong>Compute</strong> — inference runs on a Kaggle Kernel (free T4 GPU), scheduled every 12 hours. Results are pushed back to this repo and served by GitHub Pages.</li>
                 <li><strong>Outputs</strong> — mean forecast (orange line), full min–max envelope across paths (shaded band), and the two probability metrics above.</li>
             </ul>
         </section>
