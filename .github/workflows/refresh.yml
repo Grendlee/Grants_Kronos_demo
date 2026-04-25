@@ -1,0 +1,50 @@
+name: Refresh Forecast
+
+on:
+  schedule:
+    - cron: '0 */12 * * *'   # every 12 hours (00:00 and 12:00 UTC)
+  workflow_dispatch:          # also lets you trigger manually from the Actions tab
+
+permissions:
+  contents: write             # needed so the workflow can push back
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60       # Kronos-Base on CPU can take 20-30 min per run
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Cache Kronos-Base model weights
+        uses: actions/cache@v4
+        with:
+          path: ./Kronos_model
+          key: kronos-base-weights-v1
+
+      - name: Run forecast
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: python update_predictions.py
+
+      - name: Commit and push refreshed dashboard
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add prediction_chart_btcusdt.png index.html
+          if git diff --staged --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "Auto-refresh forecast [skip ci]"
+            git push
+          fi

@@ -1,0 +1,9 @@
+pandas
+numpy
+matplotlib
+torch
+python-binance
+huggingface_hub
+safetensors
+tqdm
+einops
