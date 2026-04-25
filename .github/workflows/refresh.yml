@@ -41,7 +41,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add prediction_chart_btcusdt.png index.html
+          git add prediction_chart_btcusd.png index.html
           if git diff --staged --quiet; then
             echo "No changes to commit."
           else

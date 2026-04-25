@@ -30,12 +30,12 @@ from model import KronosTokenizer, Kronos, KronosPredictor
 Config = {
     "REPO_PATH": Path(__file__).parent.resolve(),
     "MODEL_PATH": "./Kronos_model",
-    "SYMBOLS": ['BTCUSD', 'ETHUSD'],
+    "SYMBOLS": ['BTCUSD'],
     "FETCH_INTERVAL": '5m',    # Binance has no 10m — fetch 5m and resample 2-into-1.
     "INTERVAL_MIN": 10,        # target candle interval in minutes.
     "HIST_POINTS": 512,        # Kronos-Base max_context cap (~85h at 10-min).
     "PRED_HORIZON": 144,       # 24h forecast × 6 candles/hr at 10-min.
-    "N_PREDICTIONS": 30,       # Monte Carlo sample count.
+    "N_PREDICTIONS": 10,       # Monte Carlo sample count.
     "VOL_WINDOW": 144,         # last 24h of candles for historical vol baseline.
 }
 
