@@ -1,12 +1,17 @@
 """
-Grant's Kronos demo — probabilistic BTC/USDT forecast.
+Grant's Kronos demo — probabilistic BTC/ETH forecast.
 
-Adapted from shiyu-coder/Kronos-demo. Changes vs. the upstream demo:
-  - Model: Kronos-Base (102M params) instead of Kronos-mini (4M)
-  - Interval: 10-min candles (resampled from Binance 5m — Binance has no native 10m)
-  - Context: capped at 512 candles (~85h) — Kronos-Base's max_context limit
-  - Horizon: 24h = 144 10-min candles
-  - Git push + scheduler disabled for local testing (re-enable when deploying to a fork)
+Adapted from shiyu-coder/Kronos-demo. Notes on the spec:
+  - Model: Kronos-Base (102M params)
+  - Interval: 10-min candles (resampled from Binance.US 5m — no native 10m)
+  - Display: 30 days (720h) of historical price plotted on chart
+  - Model context: last 512 candles (~85h). Kronos-Base's max_context is 512;
+    feeding the full 720h (4320 candles) is not architecturally possible.
+  - Horizon: 24h forecast (144 candles)
+  - Sampling: 30 Monte Carlo paths per run
+
+Designed to be invoked by a Kaggle notebook (free P100 GPU, scheduled).
+The notebook handles git clone/push; this script writes PNGs + index.html in place.
 """
 
 import gc
@@ -30,12 +35,13 @@ from model import KronosTokenizer, Kronos, KronosPredictor
 Config = {
     "REPO_PATH": Path(__file__).parent.resolve(),
     "MODEL_PATH": "./Kronos_model",
-    "SYMBOLS": ['BTCUSD'],
+    "SYMBOLS": ['BTCUSD', 'ETHUSD'],
     "FETCH_INTERVAL": '5m',    # Binance has no 10m — fetch 5m and resample 2-into-1.
     "INTERVAL_MIN": 10,        # target candle interval in minutes.
-    "HIST_POINTS": 512,        # Kronos-Base max_context cap (~85h at 10-min).
+    "DISPLAY_HOURS": 720,      # 30 days of history shown in the chart + used for vol baseline scope.
+    "HIST_POINTS": 512,        # Model context cap. Kronos-Base max_context = 512; 720h × 6/h = 4320 candles, 8× over.
     "PRED_HORIZON": 144,       # 24h forecast × 6 candles/hr at 10-min.
-    "N_PREDICTIONS": 10,       # Monte Carlo sample count.
+    "N_PREDICTIONS": 30,       # Monte Carlo sample count.
     "VOL_WINDOW": 144,         # last 24h of candles for historical vol baseline.
 }
 
@@ -70,8 +76,7 @@ def fetch_binance_data(symbol):
     fetch_interval = Config["FETCH_INTERVAL"]
     interval_min = Config["INTERVAL_MIN"]
 
-    target_bars = Config["HIST_POINTS"] + Config["VOL_WINDOW"] + 10
-    hours_back = int((target_bars * interval_min) / 60) + 4
+    hours_back = Config["DISPLAY_HOURS"] + 4   # 30-day window for chart + vol context.
 
     print(f"Fetching ~{hours_back}h of {symbol} {fetch_interval} data from Binance.US...")
     client = Client(tld='us')   # Binance.com geo-blocks US data centers (incl. GitHub Actions); use Binance.US
@@ -284,14 +289,17 @@ def main_task(model):
     print("=" * 60)
 
     results = []
+    display_bars = int(Config["DISPLAY_HOURS"] * 60 / Config["INTERVAL_MIN"])
     for symbol in Config["SYMBOLS"]:
         print(f"\n--- Processing {symbol} ---")
         df_full = fetch_binance_data(symbol)
         df_for_model = df_full.iloc[:-1]
 
-        close_preds, volume_preds, v_close_preds = make_prediction(df_for_model, model)
+        # Kronos-Base max_context = 512 candles. Boss spec asks for 720h (4320 candles); cap at 512 for inference, keep full window for display.
+        df_for_predict = df_for_model.tail(Config["HIST_POINTS"])
+        close_preds, volume_preds, v_close_preds = make_prediction(df_for_predict, model)
 
-        hist_df_for_plot = df_for_model.tail(Config["HIST_POINTS"])
+        hist_df_for_plot = df_for_model.tail(display_bars)
         hist_df_for_metrics = df_for_model.tail(Config["VOL_WINDOW"])
 
         upside_prob, vol_amp_prob = calculate_metrics(

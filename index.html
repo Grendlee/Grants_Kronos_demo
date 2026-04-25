@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kronos · BTC Probabilistic Forecast</title>
+    <title>Kronos · BTC & ETH Probabilistic Forecast</title>
     <link rel="icon" type="image/png" href="img/logo.png">
     <link rel="stylesheet" href="style.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -24,7 +24,7 @@
     <main class="container">
         <div class="metadata">
             <span><span class="live-dot"></span> Last updated <strong id="update-time">2026-04-24 20:50:50</strong> PT</span>
-            <span>BTC/USD · Binance.US · 10-min · Kronos-Base</span>
+            <span>BTC/USD · ETH/USD · Binance.US · 10-min · Kronos-Base</span>
         </div>
 
         <section id="btc-dashboard">
@@ -48,12 +48,35 @@
             </div>
         </section>
 
+        <section id="eth-dashboard">
+            <h2>ETH/USD · Forecast Snapshot</h2>
+            <div class="metrics-container">
+                <div class="metric-card">
+                    <h3>Upside Probability · 24h</h3>
+                    <p class="metric-value" id="upside-prob-ethusd">—</p>
+                    <p class="metric-desc">The model's confidence that ETH will trade higher 24h from now than it does at the moment of forecast.</p>
+                </div>
+                <div class="metric-card">
+                    <h3>Volatility Amplification · 24h</h3>
+                    <p class="metric-value" id="vol-amp-prob-ethusd">—</p>
+                    <p class="metric-desc">Probability that realized ETH volatility over the next 24h exceeds the trailing 24h baseline.</p>
+                </div>
+            </div>
+            <div class="chart-wrapper">
+                <div class="chart-container">
+                    <img src="prediction_chart_ethusd.png" alt="ETH/USD price and volume forecast" class="chart-img">
+                </div>
+            </div>
+        </section>
+
         <section id="methodology">
             <h2>Methodology</h2>
             <ul>
                 <li><strong>Model</strong> — <code>Kronos-Base</code> (102M parameters), autoregressively predicting future K-lines.</li>
-                <li><strong>Context</strong> — last ~85h of 10-min BTC/USD candles from Binance.US, resampled from native 5-min data. Capped at 512 candles, the model's <code>max_context</code> limit.</li>
-                <li><strong>Sampling</strong> — Monte Carlo with N=10 paths, generating a distribution of possible 24h trajectories rather than a point forecast.</li>
+                <li><strong>Display history</strong> — 30 days (720h) of 10-min BTC/USD and ETH/USD candles from Binance.US, resampled from native 5-min data, plotted on the chart.</li>
+                <li><strong>Model context</strong> — the last 512 of those candles (~85h) is fed to Kronos-Base. The model's <code>max_context</code> is 512, so the full 720h cannot be passed in a single forward pass.</li>
+                <li><strong>Sampling</strong> — Monte Carlo with N=30 paths, generating a distribution of possible 24h trajectories rather than a point forecast.</li>
+                <li><strong>Compute</strong> — inference runs on a Kaggle Kernel (free P100 GPU), scheduled every 12 hours. Results are pushed back to this repo and served by GitHub Pages.</li>
                 <li><strong>Outputs</strong> — mean forecast (orange line), full min–max envelope across paths (shaded band), and the two probability metrics above.</li>
             </ul>
         </section>

@@ -1,12 +1,23 @@
 # Grant's Kronos Demo
 
-Probabilistic BTC/USDT forecast based on the [Kronos](https://github.com/shiyu-coder/Kronos) foundation model. Adapted from [shiyu-coder/Kronos-demo](https://github.com/shiyu-coder/Kronos-demo).
+Probabilistic BTC/USD and ETH/USD forecast based on the [Kronos](https://github.com/shiyu-coder/Kronos) foundation model. Adapted from [shiyu-coder/Kronos-demo](https://github.com/shiyu-coder/Kronos-demo).
 
 ## What it does
 
-- Fetches the last ~85 hours of BTC/USDT 10-min K-line data from Binance (resampled from 5-min — Binance has no native 10m interval)
+- Fetches the last 30 days (720h) of BTC/USD and ETH/USD 10-min K-line data from Binance.US (resampled from 5-min — Binance has no native 10m interval)
 - Runs Kronos-Base with 30 Monte Carlo samples to produce a distribution of 24-hour forecasts
 - Publishes a static dashboard with: mean forecast line, min–max uncertainty band, upside probability, and volatility amplification probability
+
+## Architecture
+
+```
+Kaggle Kernel (free P100 GPU, scheduled every 12h)
+   ↓ git clone + run update_predictions.py
+   ↓ git push refreshed PNGs + index.html
+GitHub repo (main branch)
+   ↓ GitHub Pages auto-deploy
+Public dashboard URL
+```
 
 ## Running locally
 
@@ -15,49 +26,75 @@ pip install -r requirements.txt
 python update_predictions.py
 ```
 
-Outputs: `prediction_chart_btcusdt.png`, and updated metrics/timestamp in `index.html`. Open `index.html` in a browser to view.
+Outputs: `prediction_chart_btcusd.png`, `prediction_chart_ethusd.png`, and updated metrics/timestamp in `index.html`. Open `index.html` in a browser.
 
-Kronos-Base is a 102M-param model — on CPU, one full run takes **~10–30 min**. On GPU (CUDA/MPS), ~1–3 min.
+Kronos-Base is a 102M-param model. Per-symbol runtime by device:
 
-## Running on Google Colab (free T4 GPU)
+| Device | Time per symbol |
+|---|---|
+| CUDA (P100/T4) | ~3 min |
+| Apple MPS | ~5–7 min |
+| CPU | ~60+ min |
 
-Open `colab_notebook.ipynb` in Colab. Runtime → Change runtime type → T4 GPU. Run all cells.
+## Production refresh — Kaggle Kernel (free P100 GPU)
 
-## Deploying to GitHub Pages
+This is the deployed setup. Inference runs on Kaggle, results push back to this repo, GitHub Pages serves them.
 
-1. Push this folder to a new GitHub repo
+**One-time setup:**
+
+1. **Create a GitHub Personal Access Token**
+   - GitHub → Settings → Developer settings → Personal access tokens → Fine-grained
+   - Repository access: only this repo
+   - Permissions: `Contents: Read and write`
+   - Copy the `github_pat_...` value
+
+2. **Create the Kaggle notebook**
+   - Sign in at https://www.kaggle.com (verify your phone if you haven't — required for free GPU)
+   - File → New Notebook → Import Notebook → upload `kaggle_runner.ipynb` from this repo (or paste the GitHub URL)
+
+3. **Configure the notebook**
+   - Right sidebar → Settings:
+     - Accelerator: **GPU P100**
+     - Internet: **On**
+     - Persistence: Off (a fresh container each run is fine)
+   - Add-ons → Secrets → Add a new secret:
+     - Label: `GITHUB_TOKEN`
+     - Value: the PAT from step 1
+     - Attach to this notebook
+
+4. **First run** — click `Save & Run All` to verify it pushes a refreshed forecast to the repo.
+
+5. **Schedule recurring runs**
+   - From the notebook viewer (after a successful run), `⋯` menu → `Schedule a notebook run`
+   - Cadence: every 12 hours
+
+Each scheduled run takes ~5–8 min on the P100. Free quota is 30 GPU-hours/week — plenty of headroom.
+
+## Deploying GitHub Pages
+
+1. Push the repo to GitHub
 2. Repo → Settings → Pages → Source: `main` branch, `/ (root)`
-3. Wait ~30s; your page is live at `https://<username>.github.io/<repo-name>/`
+3. Live at `https://<username>.github.io/<repo-name>/` after ~30s
 
-### Auto-refresh via GitHub Actions (recommended)
+## Manual / local refresh options
 
-This repo ships with `.github/workflows/refresh.yml` — a workflow that runs hourly on GitHub's free runners (CPU, no GPU), executes `update_predictions.py`, and auto-commits the refreshed chart + HTML so GitHub Pages always serves a fresh forecast.
-
-**One-time setup after pushing the repo to GitHub:**
-
-1. Go to **Settings → Secrets and variables → Actions → New repository secret**
-2. Name: `HF_TOKEN`, Value: your `hf_...` token from https://huggingface.co/settings/tokens
-3. Go to **Actions** tab → enable workflows if prompted
-4. Trigger the first run manually: Actions → "Refresh Forecast" → Run workflow
-
-After that, it runs every hour at :00 UTC. Each run takes ~20–30 min on the free CPU runner.
-
-### Other refresh options
-
-- Re-enable `run_scheduler(loaded_model)` in the `__main__` block of `update_predictions.py` and run it on a persistent host
-- Use the Colab notebook's Section 6 to push fresh results from each manual Colab run
+- **Run on your own machine:** `python update_predictions.py`. Then `git add` + commit + push the regenerated PNGs and `index.html`.
+- **Kaggle one-shot:** open the notebook on Kaggle and click `Save & Run All` — same as the scheduled path, just on demand.
+- **GitHub Actions fallback (CPU, slow):** `.github/workflows/refresh.yml` is preserved as a manual fallback (`workflow_dispatch` only — the 12-hour cron was removed because each CPU run exceeded the 60-min job timeout).
 
 ## Spec notes (for reviewers)
 
-This demo meets the original spec with two documented deviations:
+The original spec asked for "the last 720 hours (~30 days) of BTC/ETH 10-min K-line data … as context for each new prediction." This is internally inconsistent with Kronos-Base's architecture. The spec is met as follows:
 
 | Spec | Implemented | Deviation |
 |---|---|---|
 | Kronos-Base | ✅ Kronos-Base | — |
-| BTC/USDT | ✅ BTCUSDT | — |
-| 10-min candles from Binance | ✅ resampled from 5-min | Binance has no native 10m interval (returns `{"code":-1120,"msg":"Invalid interval"}`) |
-| 720h of context | ~85h of context | Kronos-Base `max_context=512`. 720h × 6 candles/hr = 4,320 candles ≫ 512. Capped at 512 to avoid silent truncation |
+| BTC + ETH | ✅ BTCUSD + ETHUSD on Binance.US | Binance.com geo-blocks US IPs, including Kaggle's data centers — switched to Binance.US |
+| 10-min candles | ✅ resampled from 5-min | Binance has no native 10m interval (returns `{"code":-1120,"msg":"Invalid interval"}`) |
+| **720h of context** | **30-day history displayed; 85h fed to model** | Kronos-Base's `max_context = 512` candles. 720h × 6 candles/hr = 4,320 candles, 8× over the limit. Architecturally impossible to feed in a single forward pass. The chart shows the full 30 days; the model's input window is the last 512 candles |
 | N=30 Monte Carlo paths | ✅ | — |
+| Free GPU compute | ✅ Kaggle P100 | — |
+| GitHub Pages hosting | ✅ | — |
 | Mean forecast + uncertainty band + probability metrics | ✅ | — |
 
 ## Files
@@ -65,9 +102,11 @@ This demo meets the original spec with two documented deviations:
 | File | Purpose |
 |---|---|
 | `update_predictions.py` | Main script: fetch → predict → metrics → chart → HTML |
+| `kaggle_runner.ipynb` | Notebook that runs on Kaggle: clones repo, runs the script, pushes back |
 | `index.html` | Static dashboard page (served by GitHub Pages) |
 | `style.css` | Page styling |
 | `model/` | Kronos model code (`kronos.py`, `module.py`, `__init__.py`) |
 | `img/` | Logo |
 | `requirements.txt` | Python dependencies |
-| `colab_notebook.ipynb` | Pre-configured Colab runner |
+| `.github/workflows/refresh.yml` | Manual GitHub Actions fallback (CPU, no schedule) |
+| `colab_notebook.ipynb` | Older Colab runner — kept as alternative manual option |
